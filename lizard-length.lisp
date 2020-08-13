@@ -110,20 +110,17 @@
 
 (defun get-position (keyboard char-or-mod)
   "Returns the position of the center of the key at key-index in keyboard's key-array"
-  (let ((key-index (get-index keyboard char-or-mod)))
-    (when key-index
-      (loop for i from 0 below key-index
-	    with row-num = 0
-	    and current-row-length = 0
-	    and current-key-width = 0
-	    do
-	       (setf current-key-width (width (aref (key-array keyboard) i)))
-	       (when (> (+ current-row-length current-key-width) (row-length keyboard))
-		 (incf row-num)
-		 (setf current-row-length 0))
-	       (incf current-row-length current-key-width)
-	    finally (return (list (+ 1/2 row-num)
-				  (+ current-row-length (/ current-key-width 2))))))))
+  (loop for key being the elements of (key-array keyboard)
+	with row-num = 0
+	and current-row-length = 0
+	do
+	   (when (typeablep char-or-mod key)
+	     (return (list (+ 1/2 row-num)
+			   (+ current-row-length (/ (width key) 2)))))
+	   (incf current-row-length (width key))
+	   (when (< (row-length keyboard) current-row-length)
+	     (setf current-row-length (width key))
+	     (incf row-num))))
 
 (defun get-key (keyboard char-or-mod)
   (aref (key-array keyboard) (get-index keyboard char-or-mod)))
