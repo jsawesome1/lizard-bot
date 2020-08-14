@@ -2,6 +2,7 @@
 
 (defpackage :lizard-bot
   (:use :common-lisp)
+  (:local-nicknames (:gl :glacier))
   (:export
    :key
    :char-key
