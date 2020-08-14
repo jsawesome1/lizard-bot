@@ -1,3 +1,5 @@
+(in-package :lizard-bot)
+
 (defclass key ()
   ((width
     :initarg :width
