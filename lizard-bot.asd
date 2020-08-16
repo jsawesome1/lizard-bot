@@ -5,4 +5,6 @@
   :depends-on (:glacier)
   :serial t
   :components ((:file "package")
-	       (:file "lizard-length")))
+	       (:file "lizard-length")
+	       (:static-file "cfg.config")
+	       (:file "bot")))
