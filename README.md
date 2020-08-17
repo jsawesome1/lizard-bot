@@ -2,9 +2,11 @@
 A mastodon bot for animals (and people) to tag that replies with a how far a lizard would have to scuttle on a keyboard from key to key in order to type out the whole message.
 
 ## TODO
-- [ ] get basic functionality working
-- [ ] respect #NoBot
+- [x] get basic functionality working
+- [x] respect #NoBot
 - [ ] prevent duplicate replies from different people tagging us
+- [ ] prevent duplicate replies to the same tag
+- [ ] allow whoever tags us to specify the status they want analyzed
 - [ ] allow anyone we've previously replied to to send us a message to shut us down with a reason
 - [ ] allow tagging on ourself once & get fun message
 - [ ] allow overrides to #NoBot

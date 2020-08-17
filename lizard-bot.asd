@@ -2,7 +2,7 @@
   :description "mastodon bot that replies with the distance scuttled by a lizard typing a message"
   :author "Jacob Singleton"
   :license "MIT"
-  :depends-on (:glacier)
+  :depends-on (:glacier :tooter :cl-ppcre :str)
   :serial t
   :components ((:file "package")
 	       (:file "lizard-length")

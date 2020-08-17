@@ -3,7 +3,9 @@
 (defpackage :lizard-bot
   (:use :common-lisp)
   (:local-nicknames (:glacier :glacier)
-		    (:tooter :tooter))
+		    (:tooter :tooter)
+		    (:ppcre :cl-ppcre)
+		    (:str :str))
   (:export
    :key
    :char-key
