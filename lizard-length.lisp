@@ -95,7 +95,8 @@
 
 (defmethod typeablep ((char character) (object char-key))
   (or (equal (basic-char object) char)
-      (equal (shift-char object) char)))
+      (and (equal (shift-char object) char)
+	   (caps-lock object))))
 
 (defmethod typeablep ((modifier symbol) (object modifier-key))
   (equal modifier (modifier object)))
@@ -123,6 +124,21 @@
 	   (when (< (row-length keyboard) current-row-length)
 	     (setf current-row-length (width key))
 	     (incf row-num))))
+
+(defun key-at-position (keyboard position)
+  "Returns the key at position on keyboard"
+  (let ((position (list (floor (first position)) (second position))))
+    (loop for key being the elements of (key-array keyboard)
+	  with row-num = 0
+	  and current-row-length = 0
+	  do
+	     (when (and (eql row-num (first position))
+			(< current-row-length (second position) (+ current-row-length (width key))))
+	       (return key))
+	     (incf current-row-length (width key))
+	     (when (< (row-length keyboard) current-row-length)
+	       (setf current-row-length (width key))
+	       (incf row-num)))))
 
 (defun get-key (keyboard char-or-mod)
   (aref (key-array keyboard) (get-index keyboard char-or-mod)))
@@ -300,30 +316,38 @@
       x
       0))
 
-(defun lizard-length (string &key (keyboard (default-keyboard))
-			       (starting-position (list 4.5 (/ (row-length keyboard) 2)))
-			       (lizard-speed 1)	;cm/sec
-			       (keyboard-inclination 0.25)) ;radians
-  "Returns the length in cm a lizard would have to scuttle in order to type out the string key by key, the time it took, and the vertical gain. This assumes that a lizard is small enough that they can only press one button at a time"
-  (let ((position (if starting-position
-		      starting-position
-		      (list 4.5 (/ (row-length keyboard) 2))));Defaults to bottom center of keyboard
+(defun lizard-length (string &key (keyboard (default-keyboard)) (starting-position (list 4.5 (/ (row-length keyboard) 2))) speed key-press-time keyboard-inclination step-size)
+  "Returns (values units-scuttled time-taken vertical-gain steps-taken). If there isn't information supplied to determine the value of time-taken, vertical-gain, or steps taken, nil is returned instead"
+  (let ((position starting-position)
 	(units-scuttled 0)
-	(y-units-scuttled 0))
+	(time (if (or speed key-press-time) 0 nil))
+	(y-units-scuttled (if keyboard-inclination 0 nil))
+	(steps-taken (if step-size 0 nil)))
     (flet ((move (new-position)
-	     (incf units-scuttled (distance position new-position))
-	     (incf y-units-scuttled (ramp (- (first new-position) (first position))))
-	     (setf position new-position)))
+	     (let ((segment-length (distance position new-position)))
+	       (incf units-scuttled segment-length)
+	       (when keyboard-inclination
+		 (incf y-units-scuttled (ramp (- (first new-position) (first position)))))
+	       (when speed
+		 (incf time (/ segment-length speed)))
+	       (when step-size
+		 (incf steps-taken (ceiling (/ (* segment-length (unit-size keyboard)) step-size)))))
+	     (setf position new-position))
+	   (press ()
+	     (key-press keyboard (key-at-position keyboard position))
+	     (when key-press-time
+	       (incf time key-press-time))))
       (loop for char being the elements in string
 	    do (when (typeablep char keyboard)
 		 (when (and (shift-char-typed keyboard (get-key keyboard char))
 			    (not (eql char (shift-char (get-key keyboard char)))))
 		   (move (get-position keyboard 'caps-lock))
-		   (key-press keyboard (get-key keyboard 'caps-lock)));really should be pushing key at position
+		   (press))
 		 (let ((next-pos (get-position keyboard char)))
 		   (move next-pos)
-		   (key-press keyboard (get-key keyboard char))))
-	    finally (let ((cm-scuttled (* units-scuttled (unit-size keyboard))))
-		      (return (values cm-scuttled
-				      (/ cm-scuttled lizard-speed)
-				      (* y-units-scuttled (sin keyboard-inclination)))))))))
+		   (press)))
+	    finally (return (values (* units-scuttled (unit-size keyboard))
+				    time
+				    (when keyboard-inclination
+				      (* y-units-scuttled (unit-size keyboard) (sin keyboard-inclination)))
+				    steps-taken))))))
