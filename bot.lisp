@@ -13,30 +13,37 @@
 
 (defun analyze-ancestor-p (status)
   ;;if  an ancestor status exists
-  (if (and (tooter:in-reply-to-id status)
-	   ;;and there is only whitespace (not including mentions) in the status we were mentioned in
-	   (not (ppcre:scan "\S" (strip-mentions status)))
-	   ;; and the ancestor status has non-mention content
-	   (ppcre:scan "\S" (strip-mentions (ancestor-status status))))
-      (ancestor-status status)
-      nil))
+  (and (tooter:in-reply-to-id status)
+       ;;and there is only whitespace (not including mentions) in the status we were mentioned in
+       (not (ppcre:scan "\S" (strip-mentions status)))))
 
 (defun analyze-status-p (status)
   (and (not (glacier:no-bot-p (tooter:id (tooter:account status))))
        (not (glacier:bot-post-p status))))
 
 (defun format-mentions (stream status)
-  (format stream "~{~a ~}" (loop for mention being the elements of (tooter:mentions status)
-				 unless (glacier:no-bot-p (tooter:id mention))
-				   collect (tooter:account-name mention))))
+  (format stream "~{@~a ~}" (loop for mention being the elements of (tooter:mentions status)
+				  unless (or (glacier:no-bot-p (tooter:id mention))
+					     (equal (tooter:account-name mention)
+						    (tooter:account-name (tooter:account
+									  (glacier:bot-client *bot*)))))
+				    collect (tooter:account-name mention))))
+
+(defun format-analysis (stream status)
+  (format stream "A lizard scuttling from key to key would have scuttled ~a cm to type this toot."
+	  (lizard-length (print (concatenate 'string
+					     (if (and (not (eql nil (tooter:spoiler-text status)))
+						      (not (equal "" (tooter:spoiler-text status))))
+						 (format nil "~a~a"
+							 (tooter:spoiler-text status)
+							 #\Tab))
+					     (tooter:content status))))))
 
 (defun reply-with-analysis (status-to-reply-to status-to-analyze)
   (glacier:reply status-to-reply-to
-		 (format nil "~aA lizard scuttling from key to key would have scuttled ~a cm to type this toot."
-			 (format-mentions nil status-to-reply-to)
-			 (lizard-length (concatenate 'string
-						     (tooter:spoiler-text status-to-analyze)
-						     (tooter:content status-to-analyze))))
+		 (concatenate 'string
+			      (format-mentions nil status-to-reply-to)
+			      (format-analysis nil status-to-analyze))
 		 :include-mentions nil))
 
 (defun notified (notification)
@@ -46,10 +53,9 @@
      (let* ((status-to-reply-to (tooter:status notification))
 	    (analyze-ancestor (analyze-ancestor-p status-to-reply-to))
 	    (status-to-analyze (print (if analyze-ancestor
-					  analyze-ancestor
+					  (ancestor-status status-to-reply-to)
 					  status-to-reply-to))))
-       (if (analyze-status-p (or analyze-ancestor
-				 status-to-reply-to))
+       (if (analyze-status-p status-to-analyze)
 	   (reply-with-analysis status-to-reply-to status-to-analyze))))))
 
 (defun start-bot ()

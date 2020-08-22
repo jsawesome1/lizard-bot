@@ -6,6 +6,7 @@
 		    (:tooter :tooter)
 		    (:ppcre :cl-ppcre)
 		    (:str :str))
+  ;;lizard-length.lisp
   (:export
    :key
    :char-key
@@ -18,4 +19,8 @@
    :add-qwerty-mid-row
    :add-qwerty-low-row
    :default-keyboard
-   :lizard-length))
+   :lizard-length)
+  ;;bot.lisp
+  (:export
+   :start-bot)
+  )
