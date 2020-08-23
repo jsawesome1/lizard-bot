@@ -17,9 +17,13 @@
        ;;and there is only whitespace (not including mentions) in the status we were mentioned in
        (not (ppcre:scan "\S" (strip-mentions status)))))
 
+(defun lizard-bot-p (account)
+  (equal (tooter:id account) (tooter:id (tooter:account (glacier:bot-client *bot*)))))
+
 (defun analyze-status-p (status)
   (and (not (glacier:no-bot-p (tooter:id (tooter:account status))))
-       (not (glacier:bot-post-p status))))
+       (or (not (glacier:bot-post-p status))
+	   (lizard-bot-p (tooter:account status)))))
 
 (defun format-mentions (stream status)
   (format stream "~{@~a ~}" (loop for mention being the elements of (tooter:mentions status)
@@ -29,15 +33,31 @@
 									  (glacier:bot-client *bot*)))))
 				    collect (tooter:account-name mention))))
 
+(defun random-from-list (list)
+  (nth (random (length list)) list))
+
+(defun random-prefix ()
+  (random-from-list '("yocto" "zepto" "atto" "femto" "pico" "nano" "micro" "milli" "centi" "deci"
+		      "" "deca" "hecto" "kilo" "kibi" "mega" "mebi" "giga" "gibi" "tera" "tebi" "peta" "pebi"
+		      "exa" "exbi" "zetta" "zebi" "yotta" "yobi")))
+
+(defun random-electric-unit ()
+  (random-from-list '("amperes" "watts" "coulombs" "volts" "henrys" "ohms" "farads" "teslas")))
+
 (defun format-analysis (stream status)
-  (format stream "A lizard scuttling from key to key would have scuttled ~a cm to type this toot."
-	  (lizard-length (print (concatenate 'string
-					     (if (and (not (eql nil (tooter:spoiler-text status)))
-						      (not (equal "" (tooter:spoiler-text status))))
-						 (format nil "~a~a"
-							 (tooter:spoiler-text status)
-							 #\Tab))
-					     (tooter:content status))))))
+  (if (lizard-bot-p (tooter:account status))
+      (format stream "A lizard didn't type that, I did, and it only took ~,2f ~a~a."
+	      (random 999.99)
+	      (random-prefix)
+	      (random-electric-unit))
+      (format stream "A lizard scuttling from key to key would have scuttled ~a cm to type this toot."
+	      (lizard-length (print (concatenate 'string
+						 (if (and (not (eql nil (tooter:spoiler-text status)))
+							  (not (equal "" (tooter:spoiler-text status))))
+						     (format nil "~a~a"
+							     (tooter:spoiler-text status)
+							     #\Tab))
+						 (tooter:content status)))))))
 
 (defun reply-with-analysis (status-to-reply-to status-to-analyze)
   (glacier:reply status-to-reply-to
