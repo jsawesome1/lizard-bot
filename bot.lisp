@@ -36,6 +36,14 @@
 (defun random-from-list (list)
   (nth (random (length list)) list))
 
+(defun random-adverb ()
+  (random-from-list (list
+		     ""
+		     (random-from-list '("just " "exactly " "almost " "only " "about " "around " "approximately " "not even"))
+		     (format nil "a ~a ~a "
+			     (random-from-list '("bit" "little" "tad" "smidge" "smidgen"))
+			     (random-from-list '("over" "under" "above" "below" "more than" "less than"))))))
+
 (defun random-prefix ()
   (random-from-list '("yocto" "zepto" "atto" "femto" "pico" "nano" "micro" "milli" "centi" "deci"
 		      "" "deca" "hecto" "kilo" "kibi" "mega" "mebi" "giga" "gibi" "tera" "tebi" "peta" "pebi"
@@ -46,7 +54,8 @@
 
 (defun format-analysis (stream status)
   (if (lizard-bot-p (tooter:account status))
-      (format stream "A lizard didn't type that, I did, and it only took ~,2f ~a~a."
+      (format stream "A lizard didn't type that, I did, and it took ~a~,2f ~a~a."
+	      (random-adverb)
 	      (random 999.99)
 	      (random-prefix)
 	      (random-electric-unit))
