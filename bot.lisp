@@ -73,7 +73,8 @@
 		 (concatenate 'string
 			      (format-mentions nil status-to-reply-to)
 			      (format-analysis nil status-to-analyze))
-		 :include-mentions nil))
+		 :include-mentions nil
+		 :idempotency-key (tooter:id status-to-analyze)))
 
 (defun notified (notification)
   (print "Notified")

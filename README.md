@@ -4,10 +4,8 @@ A mastodon bot for animals (and people) to tag that replies with a how far a liz
 ## TODO
 - [x] get basic functionality working
 - [x] respect #NoBot
-- [ ] prevent duplicate replies from different people tagging us
-- [ ] allow whoever tags us to specify the status they want analyzed
-- [ ] allow anyone we've previously replied to to send us a message to shut us down with a reason
-- [x] allow tagging on ourself once & get fun message
+- [x] prevent duplicate replies from different people tagging us (over <1 hour)
+- [x] allow tagging on ourself & get fun message
 - [ ] allow overrides to #NoBot
 - [ ] customizable values per user
 - [ ] weekly/monthly summaries for each user at request
