@@ -63,10 +63,6 @@
     :initarg row-length
     :initform 15
     :accessor row-length)
-   (unit-size
-    :initarg unit-size
-    :initform 1.9166666			;one unit is this many cm
-    :accessor unit-size)
    (key-array
     :initform (make-array 108 :fill-pointer 0 :adjustable t)
     :reader key-array)
@@ -316,27 +312,29 @@
       x
       0))
 
-(defun lizard-length (string &key (keyboard (default-keyboard)) (starting-position (list 4.5 (/ (row-length keyboard) 2))) speed key-press-time keyboard-inclination step-size)
+(defun lizard-length (string &key (user (make-instance 'user)))
   "Returns (values units-scuttled time-taken vertical-gain steps-taken). If there isn't information supplied to determine the value of time-taken, vertical-gain, or steps taken, nil is returned instead"
-  (let ((position starting-position)
+  (let ((keyboard (keyboard user))
+	(position (starting-position user))
 	(units-scuttled 0)
-	(time (if (or speed key-press-time) 0 nil))
-	(y-units-scuttled (if keyboard-inclination 0 nil))
-	(steps-taken (if step-size 0 nil)))
+	(time (if (or (move-speed user) (key-press-time user)) 0 nil))
+	(y-units-scuttled (if (keyboard-tilt user) 0 nil))
+	(steps-taken (if (step-size user) 0 nil)))
     (flet ((move (new-position)
 	     (let ((segment-length (distance position new-position)))
 	       (incf units-scuttled segment-length)
-	       (when keyboard-inclination
+	       (when (keyboard-tilt user)
 		 (incf y-units-scuttled (ramp (- (first new-position) (first position)))))
-	       (when speed
-		 (incf time (/ segment-length speed)))
-	       (when step-size
-		 (incf steps-taken (ceiling (/ (* segment-length (unit-size keyboard)) step-size)))))
+	       (when (move-speed user)
+		 (incf time (/ segment-length (move-speed user))))
+	       (when (step-size user)
+		 (incf steps-taken (ceiling (/ (* segment-length (keyboard-unit-size user))
+					       (step-size user))))))
 	     (setf position new-position))
 	   (press ()
 	     (key-press keyboard (key-at-position keyboard position))
-	     (when key-press-time
-	       (incf time key-press-time))))
+	     (when (key-press-time user)
+	       (incf time (key-press-time user)))))
       (loop for char being the elements in string
 	    do (when (typeablep char keyboard)
 		 (when (and (shift-char-typed keyboard (get-key keyboard char))
@@ -346,8 +344,11 @@
 		 (let ((next-pos (get-position keyboard char)))
 		   (move next-pos)
 		   (press)))
-	    finally (return (values (* units-scuttled (unit-size keyboard))
-				    time
-				    (when keyboard-inclination
-				      (* y-units-scuttled (unit-size keyboard) (sin keyboard-inclination)))
-				    steps-taken))))))
+	    finally (return (values (* units-scuttled (keyboard-unit-size user))
+				    (list (cons :units-moved (* units-scuttled (keyboard-unit-size user)))
+					  (cons :time-taken time)
+					  (cons :vertical-gain (when (keyboard-tilt user)
+								 (* y-units-scuttled
+								    (keyboard-unit-size user)
+								    (sin (keyboard-tilt user)))))
+					  (cons :steps-taken steps-taken))))))))
