@@ -207,13 +207,10 @@
        ;;and there is only whitespace (not including mentions) in the status we were mentioned in
        (not (ppcre:scan "\S" (strip-mentions status)))))
 
-(defun lizard-bot-p (account)
-  (equal (tooter:id account) (tooter:id (tooter:account (glacier:bot-client *bot*)))))
-
 (defun analyze-status-p (status)
   (and (not (glacier:no-bot-p (tooter:id (tooter:account status))))
        (or (not (glacier:bot-post-p status))
-	   (lizard-bot-p (tooter:account status)))))
+	   (glacier:bot-post-p status))))
 
 (defun format-mentions (stream status)
   (format stream "~{@~a ~}" (loop for mention being the elements of (tooter:mentions status)
@@ -243,7 +240,7 @@
   (random-from-list '("amperes" "watts" "coulombs" "volts" "henrys" "ohms" "farads" "teslas")))
 
 (defun format-analysis (stream status)
-  (if (lizard-bot-p (tooter:account status))
+  (if (glacier:bot-post-p status)
       (format stream "A lizard didn't type that, I did, and it took ~a~,2f ~a~a."
 	      (random-adverb)
 	      (random 999.99)
