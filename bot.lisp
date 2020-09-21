@@ -1,5 +1,8 @@
 (in-package :lizard-bot)
 
+(defparameter *bot* nil)
+(defparameter *debug* 0)
+
 (defclass lizard-bot (glacier:mastodon-bot)
   ((accounts
     :initarg :accounts
@@ -30,7 +33,7 @@
     :initform t
     :accessor primary-account-p
     :documentation "If t, summaries will only mention the primary account (first accounts)")
-   (signature ;use cl-str:containsp
+   (signature
     :initarg :signature
     :initform nil
     :accessor signature
@@ -113,7 +116,8 @@
     :accessor stats-table
     :documentation "A hash table mapping status IDs onto alists of stats about that status")))
 
-(defmethod initialize-instance :after ((user user) &rest initargs &key animal verb &allow-other-keys)
+(defmethod initialize-instance :after ((user user) &rest initargs &key animal verb name starting-position
+				       &allow-other-keys)
   (declare (ignore initargs))
   (if animal
       (progn (setf (animal user) animal)
@@ -124,34 +128,55 @@
       (progn (setf (verb user) verb)
 	     (setf (verb-supplied-p user) t))
       (progn (setf (verb user) "scuttled")
-	     (setf (verb-supplied-p user) nil))))
-
-(defmethod initialize-instance :after ((user user) &rest initargs &key name starting-position &allow-other-keys)
-  (declare (ignore initargs))
+	     (setf (verb-supplied-p user) nil)))
   (when (and (not name)
 	     (accounts user))
     (setf (name user) (tooter:account-name (first (accounts user)))))
   (unless starting-position
     (setf (starting-position user) (list 4.5 (/ (row-length (keyboard user)) 2)))))
 
-(defparameter *bot* nil)
+;; without the eval-when, the let prevents the defmacro expansion from being top-level
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (let ((command-list nil))
+    (defmacro defcommand (function-name command-name (parameter-name &key privileged (add-prefix t)) &body body)
+      "Syntactic sugar for defining commands declaratively"
+      `(progn
+	 (defun ,function-name (,parameter-name)
+	   ;; Preserve docstring
+	   ,(when (and (< 1 (length body)) (stringp (first body)))
+	      (pop body))
+	   (when (< 0 *debug*)
+	     (format *debug-io* "~%Entering command ~a called by ~a"
+		     (quote ,function-name) (tooter:account-name (tooter:account ,parameter-name))))
+	   ,@body)
+	 ;; Initialize-instance is redefined every time the defmethod is processed,
+	 ;; which clobbers previous definitions, so we store the code to add each command.
+	 ,(progn (pushnew `(glacier:add-command ,command-name (function ,function-name) bot
+						:privileged ,privileged :add-prefix ,add-prefix)
+			  command-list :test #'equalp)
+		 nil)
+	 (defmethod initialize-instance :after ((bot lizard-bot) &rest initargs)
+	   (declare (ignore initargs))
+	   ,@command-list)))))
 
 (defun keywordize (string)
   (intern (string-upcase string) :keyword))
 
-(define-condition configuration-error (parse-error)
+(define-condition user-recoverable-error (error)
   ((advice-to-user :initarg :advice
 		   :initform nil
 		   :reader advice)))
 
-(defun find-interval (text)
-  (multiple-value-bind (whole-match registers)
-      (ppcre:scan-to-strings "(\\d+)\\s+((?:day|week|month)s?)" text)
-    (unless whole-match
-      (error 'configuration-error :advice "Please specify an interval in the form of an integer followed by the duration in days, weeks, or months. For example: \"3 days\" or \"1 week\"."))
-    (let* ((amount (parse-integer (aref registers 0)))
-	   (duration (keywordize (aref registers 1))))
-      (cons amount duration))))
+(defun no-user-exists-advice (username account)
+  (format nil "No user of the name ~a was found. The users associated with your account are: ~{~%~a~%~}"
+	  username
+	  (mapcar #'name (users (get-account account)))))
+
+(defun no-account-exists-advice (action)
+  (format nil "You don't have an account with the bot. You have to create an account before you can ~a." action))
+
+(define-condition silent-error (error)
+  ())
 
 (defun interval-to-seconds (interval)
   (let ((amount (car interval))
@@ -159,7 +184,7 @@
     (* amount (case duration
 		((:day :days) (* 60 60 24))
 		((:week :weeks) (* 60 60 24 7))
-		((:month :months) (* 60 60 24 (/ 365 12)))
+		((:month :months) (* 60 60 24 (/ 365.25 12)))
 		(t (error "~S is not a keyword for day(s) week(s) or month(s)" duration))))))
 
 (defun attribute-status (status)
@@ -170,27 +195,96 @@
 		   (return-from attribute-status user)))
       (first (users account)))))
 
-(defun ensure-account (account)
-  (unless (gethash (tooter:account-name account) (accounts *bot*))
+(defun get-account (account)
+  (gethash (tooter:account-name account) (accounts *bot*)))
+
+(defun get-user (account username)
+  (some #'(lambda (user) (equal username (name user))) (users account)))
+
+(defun ensure-account (account &optional username)
+  "Ensures that an account exists in the lizard-bot hash-table, and if none match, create an account and a user with the name username"
+  (unless (get-account account)
     (let* ((new-account (change-class account 'account))
-	   (new-user (make-instance 'user :name (tooter:display-name account))))
+	   (new-user (make-instance 'user :name (or username (tooter:display-name account)))))
       (setf (users new-account) (list new-user)
 	    (accounts new-user) (list new-account))
-      (setf (gethash (tooter:account-name account) (accounts *bot*)) new-account))))
+      (setf (gethash (tooter:account-name account) (accounts *bot*)) new-account)))
+  (get-account account))
 
-(defun subscribe (status)
-  "This command subscribes the bot to whomever called it"
-  (print "Subscribing")
-  (ensure-account (tooter:account status))
-  (handler-case (let ((current-user (attribute-status status))
-		      (interval (find-interval (tooter:content status))))
-		  (setf (summary-period current-user) interval)
-		  (glacier:reply status
-				 (format nil "You've been subscribed to receive summaries every ~a ~a"
-					 (car interval)
-					 (cdr interval))))
-    (configuration-error (err)
-      (glacier:reply status (format nil "Something went wrong and you weren't subscribed. ~a" (advice err))))))
+(defun remove-command-string (string)
+  (ppcre:regex-replace (format nil "~a\\S+\\s+" (glacier:command-prefix *bot*)) string ""))
+
+(defmacro transparent-unless (test &body body)
+  (let ((result (gensym)))
+    `(let ((,result (multiple-value-list ,test)))
+       (if (first ,result)
+	   (values-list ,result)
+	   ,@body))))
+
+(defcommand subscribe "subscribe" (status)
+  "This command subscribes the bot to whomever calls it"
+  (handler-case
+      (let ((username-optional (or (null (get-account (tooter:account status)))
+				   (>= 1 (length (users (get-account (tooter:account status)))))))
+	    (current-user nil))
+	(transparent-unless
+	    (ppcre:register-groups-bind (username amount duration)
+		("!subscribe\\s+(\\S+)?\\s*(\\d+)\\s+((?:day|week|month)s?)"
+		 (tooter:content status))
+	      ;; username is optional if there are 1 or fewer users on this account
+	      (when (and (not username) (not username-optional))
+		(error 'user-recoverable-error :advice "If your account is associated with more than one user, you must specify a user to subscribe with."))
+	      (setf current-user (if (get-account (tooter:account status))
+				     (or (get-user (get-account (tooter:account status)) username)
+					 (error 'user-recoverable-error
+						:advice (no-user-exists-advice username (get-account (tooter:account status)))))
+				     (first (users (ensure-account (tooter:account status)
+								   (or username
+								       (tooter:display-name (tooter:account status))))))))
+	      (setf amount (parse-integer amount)
+		    duration (keywordize duration)
+		    (summary-period current-user) (cons amount duration))
+	      (tooter:follow (glacier:bot-client *bot*) (tooter:account status))
+	      (values (name current-user) (summary-period current-user)))
+	  (error 'user-recoverable-error :advice "Your command may be formated incorrectly. The amount must be an integer, and the duration must be either day(s), week(s), or month(s).")))
+    (user-recoverable-error (err)
+      (glacier:reply status (format nil "Something went wrong and you weren't subscribed. ~a" (advice err))))
+    (error ()
+      (glacier:reply status (format nil "Something went wrong on our end and you weren't subscribed."))
+      ;; TODO Let me know somehow/log error
+      )
+    (:no-error (username interval)
+      (glacier:reply status (format nil "~a has been subscribed to receive summaries every ~a ~a"
+				    username
+				    (car interval)
+				    (string-downcase (string (cdr interval))))))))
+
+(defcommand unsubscribe "unsubscribe" (status)
+  "This command unsubscribes the bot from whomever calls it"
+  (handler-case
+      (let* ((account (or (get-account (tooter:account status))
+			  (error 'user-recoverable-error :advice (no-account-exists-advice "unsubscribe"))))
+	     (username-optional (= 1 (length (users account))))
+	     (current-user nil))
+	(if username-optional
+	    (setf current-user (first (users account)))
+	    (ppcre:register-groups-bind (username)
+		("(\\S+)" (remove-command-string (tooter:content status)))
+	      (setf current-user (or (get-user account username)
+				     (error 'user-recoverable-error :advice (no-user-exists-advice username account))))))
+	(setf (summary-period current-user) nil)
+	(tooter:unfollow (glacier:bot-client *bot*) (tooter:account status))
+	(name current-user))
+    (user-recoverable-error (err)
+      (glacier:reply status (format nil "Something went wrong and you weren't unsubscribed. ~a" (advice err))))
+    (error ()
+      (glacier:reply status (format nil "Something went wrong on our end and you weren't unsubscribed."))
+      ;; TODO Let me know somehow/log error
+      )
+    (:no-error (username)
+      (glacier:reply status (format nil "~a has been unsubscribed from receiving automatic summaries"
+				    username)))))
+
 
 (defun strip-mentions (status)
   (loop for mention being the elements of (tooter:mentions status)
@@ -277,6 +371,5 @@
 (defun start-bot ()
   (setf *bot* (make-instance 'lizard-bot
 			     :config-file "~/common-lisp/lizard-bot/cfg.config"
-			     :on-notification #'notified ))
-  (glacier:add-command "subscribe" #'subscribe *bot*)
+			     :on-notification #'notified))
   (glacier:run-bot (*bot*)))
