@@ -15,7 +15,15 @@
     :initarg :users
     :initform nil
     :accessor users
-    :documentation "A list of all users that might post to this account. If no signatures match, fallback by attributing the post to (first users)")))
+    :documentation "A list of all users that might post to this account. If no signatures match, fallback by attributing the post to (first users)")
+   (blocklist
+    :initarg :blocklist
+    :initform (make-hash-table :test 'equal)
+    :accessor blocklist)
+   (locked-p
+    :initarg :locked-p
+    :initform t
+    :accessor locked-p)))
 
 (defclass user ()
   ((name
@@ -48,10 +56,15 @@
     :initform nil
     :accessor last-summary-sent
     :documentation "The time the bot last sent the user a summary, as a Common Lisp Universal Time")
-   (ignore-p
-    :initarg :ignore-p
+   (summary-visibility
+    :initarg :summary-visibility
+    :initform :public
+    :accessor summary-visibility
+    :documentation "The visibility of scheduled summary toots. One of :PUBLIC, :UNLISTED, :PRIVATE, :DIRECT.")
+   (ignore-user
+    :initarg :ignore-user
     :initform nil
-    :accessor ignore-p
+    :accessor ignore-user
     :documentation "If t, don't respond or analyze statuses from this user")
    (animal
     :initarg :animal
@@ -110,6 +123,11 @@
     :initform nil
     :accessor updated-length-unit
     :documentation "The unit to be used after the next summary, so calculations don't need to be redone")
+   (cumulative-stats
+    :initarg :cumulative-stats
+    :initform nil
+    :accessor cumulative-stats
+    :documentation "Whether or not we keep stats indefinitely, or reset after each summary.")
    (stats-table
     :initarg :stats-table
     :initform (make-hash-table :test 'equal :synchronized t)
